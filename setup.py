@@ -21,4 +21,13 @@ except VersionConflict:
 
 
 if __name__ == "__main__":
-    setup(use_pyscaffold=True)
+    setup(use_pyscaffold=True,
+          entry_points={
+              'paste.app_factory': [
+                  'main = tm:main',
+              ],
+              'console_scripts': [
+                  'initialize_tm_db = tm.scripts.initializedb:main',
+              ],
+          },
+          )
