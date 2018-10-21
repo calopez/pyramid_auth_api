@@ -51,3 +51,6 @@ venv*/
 
 # Mac OSX
 .DS_Store
+
+# Other
+.sqlite
