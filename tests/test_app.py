@@ -11,7 +11,7 @@ def dummy_request(dbsession):
 class BaseTest(unittest.TestCase):
     def setUp(self):
         self.config = testing.setUp(settings={
-            'sqlalchemy.url': 'sqlite:///:memory:'
+            'sqlalchemy.url': 'postgresql://usr:pass@localhost:5434/tm_db_test'
         })
         self.config.include('tm.models')
         settings = self.config.get_settings()

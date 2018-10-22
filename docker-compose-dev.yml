@@ -1,7 +1,7 @@
 version: "3.4"
 
 services:
-    mydb:
+    devdb:
         image: postgres:alpine
         restart: always
         ports:
@@ -9,6 +9,15 @@ services:
         environment:
             - POSTGRES_PASSWORD=pass
             - POSTGRES_USER=usr
-            - POSTGRES_DB=lesspapper_db_dev
+            - POSTGRES_DB=tm_db_dev
+    testdb:
+        image: postgres:alpine
+        restart: always
+        ports:
+        - "5434:5432"
+        environment:
+        - POSTGRES_PASSWORD=pass
+        - POSTGRES_USER=usr
+        - POSTGRES_DB=tm_db_test
 
 
