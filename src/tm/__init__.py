@@ -32,10 +32,7 @@ def main(global_config, **settings):
     config.scan()
     app = config.make_wsgi_app()
     # Sanity Check
-    check = asbool(config.registry.settings.get("tm.sanity_check", True))
-    config.db_sanity_check(check)
-    config.commit()
-
+    config.db_sanity_check()
     return app
 
 

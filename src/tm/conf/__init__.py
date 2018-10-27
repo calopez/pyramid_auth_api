@@ -1,14 +1,20 @@
+from pyramid.settings import asbool
+
+
 def includeme(config):
     config.add_directive('db_sanity_check', db_sanity_check)
 
 
-def db_sanity_check(config, check=True):
+def db_sanity_check(config):
     def callback():
+        check = asbool(config.registry.settings.get("tm.sanity_check", True))
         if check:
             sanity_check_callback(config)
+            config.commit()
 
     discriminator = ('db_sanity_check',)
     config.action(discriminator, callable=callback)
+
 
 def sanity_check_callback(config):
     """Perform post-initialization sanity checks.
