@@ -1,3 +1,5 @@
+import os
+import typing as t
 from .interfaces import ISecrets
 
 
@@ -9,7 +11,7 @@ def get_secrets(registry) -> dict:
     return registry.getUtility(ISecrets)
 
 
-def expandvars_dict(settings: dict) -> dict:
+def replace_env_vars(settings: dict) -> dict:
     """Expand all environment variables in a settings dictionary.
 
     ref: http://stackoverflow.com/a/16446566
@@ -21,7 +23,7 @@ def expandvars_dict(settings: dict) -> dict:
 def _expandvars(value: t.Any) -> t.Any:
     processed = value
     if isinstance(value, dict):
-        processed = expandvars_dict(value)
+        processed = replace_env_vars(value)
     elif isinstance(value, (str, bytes)):
         processed = os.path.expandvars(value)
     return processed
