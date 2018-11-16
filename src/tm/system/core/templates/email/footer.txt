@@ -1,0 +1,6 @@
+{# Plain text email footer #}
+{% block footer %}
+
+--
+Send by {{site_name}}
+{% endblock footer %}

@@ -1,82 +1,20 @@
-from sqlalchemy import engine_from_config
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.orm import configure_mappers
-import zope.sqlalchemy
-
-# import or define all models here to ensure they are attached to the
-# Base.metadata prior to any initialization routines
-
-# run configure_mappers after defining all of the models to ensure
-# all relationships can be setup
-configure_mappers()
+def config_declarative_models():
+    from tm.system.model.meta import Base
+    from tm.system.user import models
 
 
-def get_engine(settings, prefix='sqlalchemy.', isolation_level='SERIALIZABLE'):
-    return engine_from_config(settings, prefix,
-                              connect_args={"options": "-c timezone=utc"},
-                              client_encoding='utf8',
-                              isolation_level=isolation_level,
-                              # json_serializer=json_serializer
-                              )
+    attach_model_to_base(models.User, Base)
+    attach_model_to_base(models.Group, Base)
+    attach_model_to_base(models.Activation, Base)
+    attach_model_to_base(models.UserGroup, Base)
 
 
-def get_session_factory(engine):
-    factory = sessionmaker()
-    factory.configure(bind=engine)
-    return factory
+def attach_model_to_base(ModelClass: type, Base: type):
+    """Dynamically add a model to chosen SQLAlchemy Base class.
 
+    More flexibility is gained by not inheriting from SQLAlchemy declarative base and instead plugging in models during the configuration time more.
 
-def get_tm_session(session_factory, transaction_manager):
+    Directly inheriting from SQLAlchemy Base class has non-undoable side effects. All models automatically pollute SQLAlchemy namespace and may e.g. cause problems with conflicting table names. This also allows @declared_attr to access Pyramid registry.
     """
-    Get a ``sqlalchemy.orm.Session`` instance backed by a transaction.
-
-    This function will hook the session to the transaction manager which
-    will take care of committing any changes.
-
-    - When using pyramid_tm it will automatically be committed or aborted
-      depending on whether an exception is raised.
-
-    - When using scripts you should wrap the session in a manager yourself.
-      For example::
-
-          import transaction
-
-          engine = get_engine(settings)
-          session_factory = get_session_factory(engine)
-          with transaction.manager:
-              dbsession = get_tm_session(session_factory, transaction.manager)
-
-    """
-    dbsession = session_factory()
-    transaction_manager.retry_attempt_count = 3  # TODO: Hardcoded for now
-    zope.sqlalchemy.register(
-        dbsession, transaction_manager=transaction_manager)
-    return dbsession
-
-
-def includeme(config):
-    """
-    Initialize the model for a Pyramid app.
-
-    Activate this setup using ``config.include('tm.models')``.
-
-    """
-    settings = config.get_settings()
-    settings['tm.manager_hook'] = 'pyramid_tm.explicit_manager'
-
-    # use pyramid_tm to hook the transaction lifecycle to the request
-    config.include('pyramid_tm')
-
-    # use pyramid_retry to retry a request when transient exceptions occur
-    config.include('pyramid_retry')
-
-    session_factory = get_session_factory(get_engine(settings))
-    config.registry['dbsession_factory'] = session_factory
-
-    # make request.dbsession available for use in Pyramid
-    config.add_request_method(
-        # r.tm is the transaction manager used by pyramid_tm
-        lambda r: get_tm_session(session_factory, r.tm),
-        'dbsession',
-        reify=True
-    )
+    from sqlalchemy.ext.declarative import instrument_declarative
+    instrument_declarative(ModelClass, registry=Base._decl_class_registry, metadata=Base.metadata)

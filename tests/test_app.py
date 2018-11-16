@@ -13,10 +13,10 @@ class BaseTest(unittest.TestCase):
         self.config = testing.setUp(settings={
             'sqlalchemy.url': 'postgresql://usr:pass@localhost:5434/tm_db_test'
         })
-        self.config.include('tm.models')
+        self.config.include('tm.system.model')
         settings = self.config.get_settings()
 
-        from tm.models import (
+        from tm.system.model import (
             get_engine,
             get_session_factory,
             get_tm_session,
@@ -28,11 +28,11 @@ class BaseTest(unittest.TestCase):
         self.session = get_tm_session(session_factory, transaction.manager)
 
     def init_database(self):
-        from tm.models.meta import Base
+        from  tm.system.model.meta import Base
         Base.metadata.create_all(self.engine)
 
     def tearDown(self):
-        from tm.models.meta import Base
+        from  tm.system.model.meta import Base
 
         testing.tearDown()
         transaction.abort()
@@ -55,6 +55,12 @@ class TestMyViewSuccessCondition(BaseTest):
         info = my_view(dummy_request(self.session))
         self.assertEqual(info['one'].name, 'one')
         self.assertEqual(info['project'], 'Pyramid Scaffold')
+
+    def test_model_columns(self):
+        from tm.models import MyModel
+        request = dummy_request(self.session)
+        r = request.dbsession.query(MyModel).one()
+        self.assertEqual(True, True)
 
 
 class TestMyViewFailureCondition(BaseTest):

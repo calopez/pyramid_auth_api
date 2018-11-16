@@ -2,7 +2,7 @@
 # Standard Library
 import os
 
-from tm.system.utils import secrets
+from tm.utils import secrets
 
 
 def test_read_local_secrets():

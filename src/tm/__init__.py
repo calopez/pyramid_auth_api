@@ -24,40 +24,21 @@ def main(global_config, **settings):
     """
 
     config = Configurator(settings=replace_env_vars(settings))
-    config.include('.conf')
-    config.include('.conf.secrets')
-    config.include('.conf.templates')
-    config.include('.conf.models')
-    config.include('.routes')
+    # Third Party
+    config.include('cornice')
+
+    # Initializer
+    config.add_static_view('static', 'tm:static', cache_max_age=3600)
+    config.include('.config.secrets')
+    config.include('.config.system')
+    config.include('.config.app')
+
+    # Scan for configuration
     config.scan()
+
+    # Initialize WSGI/Server Application
     app = config.make_wsgi_app()
+
     # Sanity Check
     config.db_sanity_check()
     return app
-
-
-
-def make_wsgi_app(self, sanity_check=True):
-    """Create WSGI application from the current setup.
-
-    :param sanity_check: True if perform post-initialization sanity checks.
-    :return: WSGI application
-    """
-    app = self.config.make_wsgi_app()
-    # Carry the initializer around so we can access it in tests
-
-    app.initializer = self
-
-    if "sanity_check" in self.global_config:
-        # Command line scripts can override this when calling bootstrap()
-        sanity_check = asbool(self.global_config["sanity_check"])
-    else:
-        sanity_check = asbool(self.settings.get("lesspaper.base.sanity_check", True))
-
-    if sanity_check:
-        self.sanity_check()
-
-    app = self.wrap_wsgi_app(app)
-
-    return app
-
