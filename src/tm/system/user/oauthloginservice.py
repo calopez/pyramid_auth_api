@@ -4,7 +4,6 @@ import logging
 
 # Pyramid
 from pyramid.httpexceptions import HTTPFound
-from pyramid.interfaces import IRequest
 from pyramid.request import Request
 from pyramid.response import Response
 from pyramid.settings import aslist
@@ -13,21 +12,35 @@ from zope.interface import implementer
 from authomatic.adapters import WebObAdapter
 from authomatic.core import LoginResult
 
-# from tm.system.core import messages
+# tm
 from tm.system.user.interfaces import AuthenticationFailure
 from tm.system.user.interfaces import IOAuthLoginService
-from tm.system.user.services.login import LoginService
-from tm.system.user.oauth.sociallogin import NotSatisfiedWithData
-
+from tm.system.user.social import NotSatisfiedWithData
 from tm.system.user.utils import get_authomatic
 from tm.system.user.utils import get_social_login_mapper
+from tm.system.user.services.login import LoginService
+
+from tm.system.core.utils import get_config_url
+
+# from tm.system.core import messages
+class Message:
+    def add(self, *args, **kwargs): pass
 
 
-logger = logging.getLogger(__name__)
+messages = Message()
 
+# logger = logging.getLogger(__name__)
+
+logger = logging.getLogger('authomatic')
+
+# TODO: Review the following Oauth Flows: \
+# 1. https://ringcentral-api-docs.readthedocs.io/en/latest/oauth/
+# 2. https://docs.apigee.com/api-platform/security/oauth/oauth-v2-policy-authorization-code-grant-type
+# TODO: Must reading https://cybersecurity.ieee.org/blog/2016/06/02/design-best-practices-for-an-authentication-system/
+# TODO: https://searchsoftwarequality.techtarget.com/answer/Authentication-and-authorization-for-Web-applications
 
 @implementer(IOAuthLoginService)
-class OAuthLoginService:
+class DefaultOAuthLoginService:
 
     def __init__(self, request: Request):
         self.request = request
@@ -62,7 +75,7 @@ class AuthomaticLoginHandler:
     :return: Tuple (HTTP response, Authomatic result)
     """
 
-    def __init__(self, request: IRequest, provider_name: str):
+    def __init__(self, request: Request, provider_name: str):
         """Initialize AuthomaticLoginHandler.
 
         :param request: Pyramid request.
@@ -111,12 +124,10 @@ class AuthomaticLoginHandler:
         user = self.mapper.capture_social_media_user(self.request, authomatic_result)
         try:
             login_service = LoginService(self.request)
-            return login_service.authenticate_user(user, login_source=self.provider_name)
+            return login_service.create_authorization_code(user, login_source=self.provider_name)
         except AuthenticationFailure as e:
-            # messages.add(self.request, kind="error", msg=str(e), msg_id="msg-cannot-login-social-media-user")
-            login_url = self.request.route_url("login")
-            # create authorization code
-            return HTTPFound(location=login_url)
+            logger.info('Failed to create authorization code')
+            return HTTPFound(location=self.__site_url())
 
     def do_error(self, authomatic_result: LoginResult, e: Exception) -> Response:
         """Handle getting error from OAuth provider."""
@@ -125,23 +136,20 @@ class AuthomaticLoginHandler:
             # Leave a cue for sysadmins everything is not right. Use INFO level as usually this is just the user pressing Cancel on the OAuth pop up screen.
             logger.info(e)
 
-        # messages.add(self.request, kind="error", msg=str(e), msg_id="msg-authomatic-login-error")
-        login_url = self.request.route_url("login")
-        return HTTPFound(location=login_url)
+        return HTTPFound(location=self.__site_url())
 
     def do_bad_request(self):
         """Handle getting HTTP GET to POST endpoint.
 
         GoogleBot et. al.
         """
-        login_url = self.request.route_url("login")
-        return HTTPFound(location=login_url)
+        return HTTPFound(location=self.__site_url())
 
     def handle(self) -> Response:
 
         # Login is always state changing operation
-        if self.request.method != 'POST' and not self.request.params:
-            self.do_bad_request()
+        #if self.request.method != 'POST' and not self.request.params:
+        #    self.do_bad_request()
 
         # We will need the response to pass it to the WebObAdapter.
         response = Response()
@@ -183,3 +191,8 @@ class AuthomaticLoginHandler:
                 e = ex
 
         return self.do_error(authomatic_result, e)
+
+    def __site_url(self):
+        url = get_config_url(self.request, 'tm.site_url')
+        return url
+

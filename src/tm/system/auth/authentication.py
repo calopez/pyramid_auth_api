@@ -8,14 +8,14 @@ from tm.system.user.models import User
 from tm.system.user.userregistry import UserRegistry
 
 
-def get_user(session_token: str, request: IRequest) -> t.Optional[User]:
+def get_user(user_id: str, request: IRequest) -> t.Optional[User]:
     """Extract the logged in user from the request object using Pyramid's authentication framework."""
     # user_id = unauthenticated_userid(request)
     # TODO: Abstract this to its own service like in Warehouse?
     user_registry = UserRegistry(request)
     user = None
-    if session_token is not None:
-        user = user_registry.get_user_by_session_token(session_token)
+    if user_id is not None:
+        user = user_registry.get_user_by_id(user_id)
         # Check through conditions why this user would no longer be valid
         if user and not user.can_login():
             # User account disabled while in mid-session

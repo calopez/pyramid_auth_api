@@ -17,11 +17,11 @@ from pyramid.security import Allow, Everyone
 from pyramid.view import view_config
 
 # System
-from system.user.oauth.loginservice import OAuthLoginService
+from tm.system.user.userregistry import UserRegistry
 from tm.system.user.interfaces import AuthenticationFailure
 from tm.system.user.interfaces import CannotResetPasswordException
 from tm.system.http import Request
-from tm.system.user.schemas import LoginSchema
+from tm.system.user.schemas import LoginSchema, AccessTokenSchema, SignUpSchema
 from tm.system.user.schemas import ForgotPasswordSchema
 from tm.system.user.schemas import ResetPasswordSchema
 from tm.system.user.utils import get_oauth_login_service
@@ -64,21 +64,32 @@ messages = Message()
 #                   description="User account manager")
 
 
-@view_config(route_name='register', request_method='POST')
+@view_config(route_name='users', request_method='GET', permission='authenticated')
+def users(request: Request) -> Response:
+    user_registry = UserRegistry(request)
+    result = list(map(lambda u: u.full_name, user_registry.all()))
+    return Response(json=result)
+
+
+@view_config(route_name='signup', request_method='POST')
 # @account.post(schema=RegisterSchema, validators=(body_validator,))
-def register(request: Request) -> Response:
+def signup(request: Request) -> Response:
     """Sign up view.
 
     :param request: Pyramid request.
     :return: Pyramid Response
     """
-    captured = request.validated
-    registration_service = SignUpService(request)
-    return registration_service.sign_up(user_data=captured)
+    try:
+        captured = SignUpSchema(context={'request': request}).load(request.json)
+    except ValidationError as e:
+        return HTTPUnauthorized(json={'message': e.messages})
+
+    signup_service = SignUpService(request)
+    return signup_service.sign_up(user_data=captured)
 
 
-@view_config(route_name='login_social')
-def login_social(request: Request) -> dict:
+@view_config(route_name='login_social', request_method=('POST', 'GET'))
+def login_social(request: Request) -> Response:
     """Login using OAuth and any of the social providers.
 
     :param request: Pyramid request.
@@ -86,10 +97,23 @@ def login_social(request: Request) -> dict:
     """
     # Get the internal provider name URL variable.
     provider_name = request.matchdict.get('provider_name')
-    oauth_login_service = OAuthLoginService(request)
+    oauth_login_service = get_oauth_login_service(request)
     assert oauth_login_service, "OAuth not configured for {}".format(provider_name)
     return oauth_login_service.handle_request(provider_name)
 
+
+@view_config(route_name='access_token', request_method='POST')
+def access_token(request: Request) -> Response:
+    payload = dict(request.POST.items())
+    try:
+        captured = AccessTokenSchema().load(payload)
+    except ValidationError as e:
+        return HTTPUnauthorized(json={'message': e.messages})
+
+    client_id = captured['client_id']
+    authorizationcode = captured['authorizationcode']
+    login_service = LoginService(request)
+    return login_service.create_access_token(client_id, authorizationcode)
 
 @view_config(route_name='activate', request_method='POST')
 def activate(request: Request) -> Response:
@@ -99,8 +123,8 @@ def activate(request: Request) -> Response:
     :return: Context to be used by the renderer.
     """
     code = request.matchdict.get('code', None)
-    registration_service = SignUpService(request)
-    return registration_service.activate_by_email(code)
+    signup_service = SignUpService(request)
+    return signup_service.activate_by_email(code)
 
 
 @view_config(route_name='login', request_method='POST')
@@ -110,9 +134,8 @@ def login(request: Request) -> Response:
     :param request: Pyramid request.
     :return: Context to be used by the renderer or a HTTPFound redirect if user is already logged in.
     """
-    payload = dict(request.POST.items())
     try:
-        captured = LoginSchema().load(payload)
+        captured = LoginSchema().load(request.json_body)
     except ValidationError as e:
         return HTTPUnauthorized(json={'message': e.messages})
 
@@ -177,9 +200,9 @@ def reset_password(request: Request) -> Response:
     if not user:
         raise HTTPNotFound(json={'message': 'Invalid password reset code'})
 
-    payload = dict(request.POST.items())
+    # n2IsrSqNTFt4uJBErIs8Q3DjMSUGZKC
     try:
-        captured = ResetPasswordSchema().load(payload)
+        captured = ResetPasswordSchema(context={'request': request}).load(request.json_body)
     except ValidationError as e:
         return HTTPUnprocessableEntity(json={'errors': e.messages})
 

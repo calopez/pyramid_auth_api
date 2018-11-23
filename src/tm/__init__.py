@@ -30,6 +30,7 @@ def main(global_config, **settings):
     # Initializer
     config.add_static_view('static', 'tm:static', cache_max_age=3600)
     config.include('.config.secrets')
+    config.include('.config.cors')
     config.include('.config.system')
     config.include('.config.app')
 

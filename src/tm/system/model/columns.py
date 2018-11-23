@@ -28,6 +28,25 @@ class UTCDateTime(DateTime):
     def _dialect_info(self, dialect):
         return super(UTCDateTime, self)._dialect_info(dialect)
 
+#
+# import sqlalchemy.types as types
+# import pytz
+# class UTCDateTime(types.TypeDecorator):
+#     ''' An SQLAlchemy DateTime column that explicitly uses timezone aware dates and only accepts UTC. '''
+#
+#     impl = types.DateTime
+#
+#     def process_bind_param(self, value, dialect):
+#         self.impl.timezone = True
+#         if value:
+#             return value.replace(tzinfo=pytz.UTC)
+#         return value
+#
+#     def process_result_value(self, value, dialect):
+#         self.impl.timezone = True
+#         if value:
+#             return value.replace(tzinfo=pytz.UTC)
+#         return value
 
 # Don't expose sqlalchemy_utils internals as they may go away
 __all__ = ["UTCDateTime"]

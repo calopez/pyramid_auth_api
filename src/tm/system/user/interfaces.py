@@ -34,6 +34,9 @@ class IGroupModel(Interface):
     """Register utility registration which marks active Group SQLAlchemy model class."""
 
 
+class IAuthorizationCode(Interface):
+    """Register utility registration which marks Authorization Code SQLAlchemy model class."""
+
 class IActivationModel(Interface):
     """Register utility registration which marks active Activation SQLAlchemy model class."""
 
@@ -151,6 +154,10 @@ class IUserRegistry(Interface):
 
 class CannotResetPasswordException(HTTPException):
     """Password reset is disabled for this user e.g. due to disabled account."""
+
+
+class CannotCreateAuthorizationCodeException(HTTPException):
+    """Authorization code exchange is disabled for this user e.g. due to disabled account."""
 
 
 class ICredentialService(Interface):

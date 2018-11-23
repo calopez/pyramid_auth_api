@@ -19,6 +19,6 @@ except VersionConflict:
     print("Error: version of setuptools is too old (<38.3)!")
     sys.exit(1)
 
-
+# TODO: find out why we need to run pip-compile so: << echo "-e ." | pip-compile -o requirements.txt - >> instead of just pip-compile in order to pin the package versions
 if __name__ == "__main__":
     setup(use_pyscaffold=True)

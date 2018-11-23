@@ -7,6 +7,7 @@ def config_declarative_models():
     attach_model_to_base(models.Group, Base)
     attach_model_to_base(models.Activation, Base)
     attach_model_to_base(models.UserGroup, Base)
+    attach_model_to_base(models.AuthorizationCode, Base)
 
 
 def attach_model_to_base(ModelClass: type, Base: type):

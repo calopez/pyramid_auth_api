@@ -3,6 +3,24 @@ import typing as t
 from .interfaces import ISecrets
 
 
+from tm.system.http import Request
+
+
+def get_config_url(request: Request, config_key: str) -> str:
+    """Route to a given URL from settings file."""
+    settings = request.registry.settings
+
+    try:
+        return settings[config_key]
+    except KeyError:
+        return settings[config_key]
+
+
+def get_config_route(request: Request, config_key: str) -> str:
+    """Route to a given URL from settings file."""
+    return request.route_url(get_config_url(request, config_key))
+
+
 def get_secrets(registry) -> dict:
     """Get the secrets provider dictionary.
 

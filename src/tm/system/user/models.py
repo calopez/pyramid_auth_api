@@ -26,12 +26,13 @@ from sqlalchemy.orm import Session
 
 # System
 from tm.system.model.columns import UTCDateTime
-from tm.utils.time import now
+# from tm.utils.time import now
 from tm.utils.crypt import generate_random_string
-from tm.system.user.interfaces import IUserModel
+from tm.system.user.interfaces import IUserModel, IAuthorizationCode
 from tm.system.user.interfaces import IGroupModel
 from tm.system.user.interfaces import IActivationModel
 
+now = datetime.datetime.now
 #: Initialize user_data JSONB structure with these fields on new User
 DEFAULT_USER_DATA = {
     "full_name": None,
@@ -78,6 +79,13 @@ class User:
 
     #: SQLAlchemy relationship for above
     activation = orm.relationship('Activation', backref='user')
+
+    #: Current authorization code instance for exchange access token
+    authorization_code_id = Column(Integer, ForeignKey("user_authorization_code.id"))
+
+    #: SQLAlchemy relationship for above
+    authorization_code = orm.relationship('AuthorizationCode', backref='user')
+
 
     #: Running counter id of the user
     id = Column(Integer, autoincrement=True, primary_key=True)
@@ -242,6 +250,33 @@ class Group:
     group_data = Column(JSONType, default=dict)
 
 
+
+@implementer(IAuthorizationCode)
+class AuthorizationCode:
+    """Authorization code to be exchanged for an access token
+
+    user authorization code
+    """
+
+    __tablename__ = "user_authorization_code"
+
+    __init__ = _declarative_constructor
+
+    #: Running counter id
+    id = Column(Integer, autoincrement=True, primary_key=True)
+    created_at = Column(UTCDateTime, default=now)
+    updated_at = Column(UTCDateTime, onupdate=now)
+
+    #: All authorization code must have expiring time
+    expires_at = Column(UTCDateTime, nullable=False)
+
+    code = Column(String(32), nullable=False, unique=True, default=lambda: generate_random_string(32))
+
+    def is_expired(self):
+        """The activation best before is past and we should not use it anymore."""
+        return self.expires_at < now()
+
+
 @implementer(IActivationModel)
 class Activation:
     """Sign up / forgot password activation code reference.
@@ -338,4 +373,4 @@ class FirstLoginManager:
         self.init_first_user(dbsession, user)
 
 
-__all__ = ["User", "Group", "Activation", "FirstLoginManager"]
+__all__ = ["User", "Group", "Activation", "FirstLoginManager", "AuthorizationCode"]

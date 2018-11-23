@@ -51,7 +51,7 @@ def main(argv=sys.argv):
         dbsession = get_tm_session(session_factory, transaction.manager)
         group = Group(name=Group.DEFAULT_ADMIN_GROUP_NAME, description="Super administrator")
         dbsession.add(group)
-        create(dbsession, username="Carlos", email="carloslopez@me.com", password="some?pass" )
+        create(dbsession, username="Carlos", email="carloslopez@me.com", password="some?pass", admin=True )
 
 
 if __name__ == "__main__":

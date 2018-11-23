@@ -1,7 +1,7 @@
 """HTTP request and response handling."""
 
 # Pyramid
-from pyramid.interfaces import ISession
+from pyramid.interfaces import ISession, IRequest
 from pyramid.registry import Registry
 from pyramid.request import Request as _Request
 from transaction import TransactionManager
@@ -9,9 +9,10 @@ from transaction import TransactionManager
 # SQLAlchemy
 from sqlalchemy.orm import Session
 
-from tm.system.user.models import User
+from zope.interface import implementer
+from tm.system.user.interfaces import IUserModel
 
-
+@implementer(IRequest)
 class Request(_Request):
     """HTTP request class.
 
@@ -34,7 +35,7 @@ class Request(_Request):
 
     """
 
-    def __type_hinting__(self, user: User, dbsession: Session, session: ISession, registry: Registry, transaction_manager: TransactionManager):
+    def __type_hinting__(self, user: IUserModel, dbsession: Session, session: ISession, registry: Registry, transaction_manager: TransactionManager):
         """A dummy helper function to tell IDEs about reify'ed variables.
 
         :param user: The logged in user. None if the visitor is anonymous.

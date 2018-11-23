@@ -1,13 +1,13 @@
 """Events fired by system.user package."""
 # System
-from pyramid.interfaces import IRequest
 from tm.system.user.models import User
+from tm.system.http import Request
 
 
 class UserEvent:
     """User related event."""
 
-    def __init__(self, request: IRequest, user: User):
+    def __init__(self, request: Request, user: User):
         """Initialize UserEvent.
 
         :param request: Pyramid Request.
@@ -62,7 +62,7 @@ class UserAuthSensitiveOperation(UserEvent):
         * Email change (TODO)
     """
 
-    def __init__(self, request: IRequest, user: User, kind: str):
+    def __init__(self, request: Request, user: User, kind: str):
         """Initialize UserAuthSensitiveOperation.
 
         :param request: Pyramid Request.
@@ -73,10 +73,10 @@ class UserAuthSensitiveOperation(UserEvent):
         self.kind = kind
 
 
-class NewRegistrationEvent(UserEvent):
+class NewSignUpEvent(UserEvent):
     """User register to the portal."""
 
-    def __init__(self, request: IRequest, user: User, activation: str, values: dict):
+    def __init__(self, request: Request, user: User, activation: str, values: dict):
         """Initialize NewRegistrationEvent.
 
         :param request: Pyramid Request.
@@ -92,7 +92,7 @@ class NewRegistrationEvent(UserEvent):
 class RegistrationActivatedEvent(UserEvent):
     """User activation om the portal."""
 
-    def __init__(self, request: IRequest, user: User, activation: str):
+    def __init__(self, request: Request, user: User, activation: str):
         """Initialize RegistrationActivatedEvent.
 
         :param request: Pyramid Request.
@@ -106,7 +106,7 @@ class RegistrationActivatedEvent(UserEvent):
 class PasswordResetEvent(UserEvent):
     """User reset password."""
 
-    def __init__(self, request: IRequest, user: User, password: str):
+    def __init__(self, request: Request, user: User, password: str):
         """Initialize PasswordResetEvent.
 
         :param request: Pyramid Request.

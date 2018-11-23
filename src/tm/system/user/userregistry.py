@@ -1,6 +1,7 @@
 """Default user object generator."""
 # Standard Library
 from datetime import timedelta
+import typing as t
 
 # Pyramid
 from zope.interface import implementer
@@ -10,6 +11,7 @@ from sqlalchemy import func
 
 from tm.utils.time import now
 from tm.system.user.interfaces import IUserRegistry
+from tm.system.user.models import User
 
 @implementer(IUserRegistry)
 class UserRegistry:
@@ -41,8 +43,8 @@ class UserRegistry:
 
         :return: Class Group.
         """
-        from tm.system.user.models import User
-        return User
+        from tm.system.user.models import Group
+        return Group
 
     @property
     def Activation(self):
@@ -52,6 +54,18 @@ class UserRegistry:
         """
         from tm.system.user.models import Activation
         return Activation
+
+    @property
+    def AuthorizationCode(self):
+        """Currently configured AuthorizationCode SQLAlchemy model.
+
+        :return: Class AuthorizationCode.
+        """
+        from tm.system.user.models import AuthorizationCode
+        return AuthorizationCode
+
+    def all(self):
+        return self.dbsession.query(self.User).all()
 
     def set_password(self, user, password):
         """Hash a password for persistent storage.
@@ -128,6 +142,30 @@ class UserRegistry:
         """
         return user.groups
 
+    def create_authorization_code(self, user: User, login_source: str = None):
+        """Sets authorization code for user.
+
+        :param user: User
+        :return: [User, authorization_code, authorization_code_expiry_seconds]. ``None`` if user is not allowed to login
+        """
+
+        if not user.can_login():
+            return None
+
+        authorization_code_expiry_seconds = int(self.registry.settings.get("tm.oauth.authorization_code_expiry_seconds", 30))
+
+        auth_code = self.AuthorizationCode()
+        auth_code.expires_at = now() + timedelta(seconds=authorization_code_expiry_seconds)
+        self.dbsession.add(auth_code)
+        self.dbsession.flush()
+        user.authorization_code = auth_code
+
+        assert user.authorization_code.code, "Could not generate the authorization code"
+
+        return user, auth_code.code, authorization_code_expiry_seconds
+
+
+
     def create_password_reset_token(self, email):
         """Sets password reset token for user.
 
@@ -191,21 +229,13 @@ class UserRegistry:
             return user
         return None
 
-    def get_session_token(self, user):
-        """Get marker string we use to store reference to this user in authenticated session.
-
-        :param user: User object.
-        :return: User id.
-        """
-        return user.id
-
-    def get_user_by_session_token(self, token):
+    def get_user_by_id(self, id):
         """Resolve the authenticated user by a session token reference.
 
-        :param token: Token to be used to return the user.
+        :param id: user id
         :return: User object.
         """
-        return self.dbsession.query(self.User).get(token)
+        return self.dbsession.query(self.User).get(id)
 
     def get_user_by_password_reset_token(self, token):
         """Get user by a password token issued earlier.
@@ -223,6 +253,29 @@ class UserRegistry:
             user = self.get_by_activation(activation)
             return user
         return None
+
+    def validate_authorization_code(self, client_id, authorization_code):
+        """Validate authorization code and get user
+
+        * Consume any authorization code. This is one time operation once got it must be deleted
+        * Must validate the code belongs to the client_id parameter
+
+        :param client_id: User id
+        :param authorization_code: Authorization code
+        :return: User instance or none if code is not found.
+        """
+        result = self.dbsession.query(self.User, self.AuthorizationCode). \
+                                   filter(self.User.authorization_code_id == self.AuthorizationCode.id).\
+                                   filter(self.User.id == client_id).\
+                                   filter(self.AuthorizationCode.code == authorization_code).one()
+        user = None
+        if result:
+            user, auth_code = result
+            if auth_code.is_expired():
+                user = None
+            self.dbsession.delete(auth_code) # consume the auth code
+
+        return user
 
     def activate_user_by_email_token(self, token):
         """Get user by a password token issued earlier.
@@ -258,7 +311,7 @@ class UserRegistry:
         self.dbsession.delete(user.activation)
 
     def sign_up(self, registration_source, user_data):
-        """Sign up a new user through registration form.
+        """Sign up a new user with credentials
 
         :param registration_source: Indication where the user came from.
         :param user_data: Payload with new user information.

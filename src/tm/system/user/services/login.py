@@ -1,19 +1,25 @@
 """Default login service implementation."""
+import logging
 # Pyramid
-from pyramid.httpexceptions import HTTPOk, HTTPNoContent
+from pyramid.httpexceptions import HTTPOk, HTTPNoContent, HTTPFound
 from pyramid.response import Response
 from pyramid.security import Authenticated
 from pyramid.settings import asbool
 from pyramid.settings import aslist
-from pyramid.interfaces import IRequest
 
+from tm.system.http import Request
 from tm.system.user.models import User
 from tm.system.user.userregistry import UserRegistry
 from tm.utils.time import now
 
-from system.user import events
-from system.user.interfaces import AuthenticationFailure
+from tm.system.core.utils import get_config_url
+from tm.system.user import events
+from tm.system.user.interfaces import AuthenticationFailure
+from tm.system.user.interfaces import CannotCreateAuthorizationCodeException
+import uuid
+import sys
 
+logger = logging.getLogger(__name__)
 
 class LoginService:
     """A login service which tries to authenticate with email and username against the current user registry.
@@ -21,7 +27,7 @@ class LoginService:
     Login service must know details about user implementation and user registry abstraction is not enough.
     """
 
-    def __init__(self, request: IRequest):
+    def __init__(self, request: Request):
         """Initialize LoginService.
 
         :param request: Pyramid Request.
@@ -131,12 +137,12 @@ class LoginService:
             raise AuthenticationFailure('Your account is not active, please check your e-mail. If your account '
                                         'activation email has expired please request a password reset.')
 
-        token = self.__make_jwt_token(user)
+        token = self.__create_jwt_token(user)
         assert token, "Authentication backend did not give us any authentication token"
 
         return self.do_post_login_actions(user, headers={'Authorization': 'Bearer ' + token})
 
-    def __make_jwt_token(self, user: User) -> str:
+    def __create_jwt_token(self, user: User) -> str:
         """
 
         * List all groups as ``group:admin`` style strings
@@ -200,3 +206,41 @@ class LoginService:
         headers = {'Authorization': ''}
 
         return HTTPNoContent(headers=headers, json=None)
+
+    def create_authorization_code(self, user: User, login_source: str) -> Response:
+        """Create a new authorization code to be exchanged by an access token
+
+        * Sets authorization code
+
+        :param user: User.
+        :return: Response. redirect to the client ui url that knows how to manage the auth code exchange
+        :raise: CannotCreateAuthorizationCodeException if there is any reason the authorization code can't be reset.
+        """
+        user_registry = UserRegistry(self.request)
+
+        auth_code_info = user_registry.create_authorization_code(user)
+        if not auth_code_info:
+            raise CannotCreateAuthorizationCodeException("Cannot generate authorization code for email: {email}".format(email=user.email))
+        user, code, expiration_seconds = auth_code_info
+
+        url = get_config_url(self.request, 'tm.ui_access_token_url')
+        authcode_url = "{}?authorizationcode={}&client_id={}&expires_in={}".format(url, code,  user.id, expiration_seconds )
+        logger = logging.getLogger('authomatic')
+        logger.info("Redirecting user to {}".format( authcode_url))
+        return HTTPFound(location=authcode_url)
+
+    def create_access_token(self, client_id, authorization_code):
+        """ Exchange authorization code by access token
+
+        :param client_id: the owner of the authorization code
+        :param authorization_code: code returned at the end of the social login process i.e facebook, google, etc.
+        :return:  HTTPResponse what should happen as post-authenticate_user action
+        """
+        user_registry = UserRegistry(self.request)
+        user = user_registry.validate_authorization_code(client_id, authorization_code)
+        if not user:
+            raise AuthenticationFailure('Invalid client_id or authorization code.')
+
+        logger = logging.getLogger('authomatic')
+        logger.info("User exchange authorization code {} by access token".format(authorization_code))
+        return self.authenticate_user(user, login_source='Authorization Code')

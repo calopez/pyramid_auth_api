@@ -26,11 +26,11 @@ def email_exists(request: IRequest, value: str):
         raise ValidationError("Email does not exists: {email}".format(email=value))
 
 
-class RegisterSchema(Schema):
+class SignUpSchema(Schema):
     """Username-less registration form schema."""
 
-    email = fields.Email()
-    password = fields.String(validate=validate.Length(min=PASSWORD_MIN_LENGTH))
+    email = fields.Email(required=True)
+    password = fields.String(required=True, validate=validate.Length(min=PASSWORD_MIN_LENGTH))
 
     @validates('email')
     def validate_email(self, value):
@@ -54,6 +54,13 @@ class LoginSchema(Schema):
     username = fields.Email(required=True)
     password = fields.String(validate=validate.Length(min=PASSWORD_MIN_LENGTH), required=True)
 
+class AccessTokenSchema(Schema):
+    """AccessToken request schema.
+
+    Authorization code is used to request an access token
+    """
+    authorizationcode = fields.Str(required=True)
+    client_id = fields.Int(required=True)
 
 class ResetPasswordSchema(Schema):
     """Reset password schema."""

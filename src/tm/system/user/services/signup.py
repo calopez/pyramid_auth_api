@@ -5,17 +5,17 @@ import logging
 # Pyramid
 from pyramid.httpexceptions import HTTPNoContent
 from pyramid.httpexceptions import HTTPNotFound
-from pyramid.interfaces import IRequest
 from pyramid.response import Response
 from pyramid.settings import asbool
 
 from tm.system.user.events import UserCreated
-from tm.system.user.events import NewRegistrationEvent
+from tm.system.user.events import NewSignUpEvent
 from tm.system.user.events import RegistrationActivatedEvent
 from tm.system.mail import send_templated_mail
 from tm.system.user.models import User
-from system.user.services.login import LoginService
+from tm.system.user.services.login import LoginService
 from tm.system.user.userregistry import UserRegistry
+from tm.system.http import Request
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ class SignUpService:
     Send activation email to everybody and ask them to click a link there.
     """
 
-    def __init__(self, request: IRequest):
+    def __init__(self, request: Request):
         """Initialize registration service.
 
         :param request: Pyramid Request.
@@ -63,7 +63,7 @@ class SignUpService:
         elif not autologin:
             messages.add(self.request, msg_id="msg-sign-up-complete", msg="Sign up complete. Welcome!", kind="success")
 
-        self.request.registry.notify(NewRegistrationEvent(self.request, user, None, user_data))
+        self.request.registry.notify(NewSignUpEvent(self.request, user, None, user_data))
         self.request.dbsession.flush()  # in order to get the id
 
         if autologin:
@@ -113,7 +113,7 @@ class SignUpService:
 
         user = user_registry.activate_user_by_email_token(activation_code)
         if not user:
-            raise HTTPNotFound("Activation code not found")
+            raise HTTPNotFound("Activation code not found", json={'message': 'Activation code not found.'})
 
         if login_after_activation:
             login_service = LoginService(self.request)

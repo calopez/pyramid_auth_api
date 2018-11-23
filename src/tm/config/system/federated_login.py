@@ -16,12 +16,13 @@ def includeme(config):
     # TODO: Refactor this to separate functions, not implementation is not very clean
 
     import authomatic
-    from tm.system.user.interfaces import IAuthomatic, ISocialLoginMapper #, IOAuthLoginService
-    # from tm.system.user.oauth.loginservice import OAuthLoginService
+    from tm.system.user.interfaces import IAuthomatic, ISocialLoginMapper , IOAuthLoginService
+    from tm.system.user.oauthloginservice import DefaultOAuthLoginService
 
     secrets = config.registry.queryUtility(ISecrets)
 
-    config.add_route('login_social', '/login/{provider_name}')
+    config.add_route('login_social', '/oauth/login/{provider_name}')
+    config.add_route('access_token', '/oauth/accesstoken')
 
     social_logins = aslist(config.registry.settings.get("tm.social_logins", ""))
 
@@ -64,5 +65,5 @@ def includeme(config):
     instance = authomatic.Authomatic(config=authomatic_config, secret=authomatic_secret, logger=logger)
     config.registry.registerUtility(instance, IAuthomatic)
 
-    # config.registry.registerAdapter(factory=OAuthLoginService, required=(IRequest,),
-    #                                      provided=IOAuthLoginService)
+    config.registry.registerAdapter(factory=DefaultOAuthLoginService, required=(IRequest,),
+                                         provided=IOAuthLoginService)

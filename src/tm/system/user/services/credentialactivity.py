@@ -7,14 +7,16 @@ from zope.interface import implementer
 from pyramid.interfaces import IRequest
 
 # System
-from tm.system.user.route import get_config_route
 from tm.system.mail import send_templated_mail
+from tm.system.user.models import User
 from tm.system.user.events import PasswordResetEvent
 from tm.system.user.events import UserAuthSensitiveOperation
 from tm.system.user.interfaces import CannotResetPasswordException
 from tm.system.user.interfaces import ICredentialService
 from tm.system.user.interfaces import IUser
 from tm.system.user.userregistry import UserRegistry
+from tm.system.http import Request
+from tm.system.core.utils import get_config_url
 
 
 class Message:
@@ -28,7 +30,7 @@ messages = Message()
 class CredentialService:
     """Handle password reset process and such."""
 
-    def __init__(self, request: IRequest):
+    def __init__(self, request: Request):
         self.request = request
 
     def create_forgot_password_request(self, email: str) -> Response:
