@@ -53,7 +53,8 @@ class CredentialService:
             raise CannotResetPasswordException("Cannot reset password for email: {email}".format(email=email))
         user, token, expiration_seconds = reset_info
 
-        link = request.route_path('reset_password', code=token)
+        url = get_config_url(self.request, 'tm.ui_reset_password_url')
+        link = '{}?code={}'.format(url, token)
         context = dict(link=link, user=user, expiration_hours=int(expiration_seconds / 3600))
         send_templated_mail(request, [email, ], "login/email/forgot_password", context=context)
 

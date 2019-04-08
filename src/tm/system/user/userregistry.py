@@ -267,7 +267,7 @@ class UserRegistry:
         result = self.dbsession.query(self.User, self.AuthorizationCode). \
                                    filter(self.User.authorization_code_id == self.AuthorizationCode.id).\
                                    filter(self.User.id == client_id).\
-                                   filter(self.AuthorizationCode.code == authorization_code).one()
+                                   filter(self.AuthorizationCode.code == authorization_code).one_or_none()
         user = None
         if result:
             user, auth_code = result

@@ -21,7 +21,7 @@ from tm.system.user.userregistry import UserRegistry
 from tm.system.user.interfaces import AuthenticationFailure
 from tm.system.user.interfaces import CannotResetPasswordException
 from tm.system.http import Request
-from tm.system.user.schemas import LoginSchema, AccessTokenSchema, SignUpSchema
+from tm.system.user.schemas import LoginSchema, AuthorizationCodeSchema, SignUpSchema, ActivateSchema
 from tm.system.user.schemas import ForgotPasswordSchema
 from tm.system.user.schemas import ResetPasswordSchema
 from tm.system.user.utils import get_oauth_login_service
@@ -37,9 +37,9 @@ logger = logging.getLogger(__name__)
 
 class Blog(object):
     __acl__ = [
-        (Allow, Everyone, 'view'),
-        (Allow, 'group:editors', 'add'),
-        (Allow, 'group:editors', 'edit'),
+        (Allow, Everyone, "view"),
+        (Allow, "group:editors", "add"),
+        (Allow, "group:editors", "edit"),
     ]
 
 
@@ -49,162 +49,208 @@ class Message:
 
 messages = Message()
 
-# self.config.add_route('login', '/login', accept='application/json')
-# self.config.add_route('logout', '/logout', accept='application/json')
-# self.config.add_route('forgot_password', '/forgot-password', accept='application/json')
-# self.config.add_route('reset_password', '/reset-password/{code}', accept='application/json')
-# self.config.add_route('register', '/register', accept='application/json')
-# self.config.add_route('activate', '/activate/{code}', accept='application/json')
-
-# from cornice import Service
 # from cornice.validators import marshmallow_body_validator as body_validator
+from cornice import Service
+from cornice.validators import colander_body_validator as body_validator
+from cornice.validators import colander_querystring_validator as querystring_validator
 
-# account = Service(name='account',
-#                   path='/account',
-#                   description="User account manager")
-
-
-@view_config(route_name='users', request_method='GET', permission='authenticated')
+@view_config(route_name="users", request_method="GET", permission="authenticated")
 def users(request: Request) -> Response:
     user_registry = UserRegistry(request)
     result = list(map(lambda u: u.full_name, user_registry.all()))
     return Response(json=result)
 
 
-@view_config(route_name='signup', request_method='POST')
-# @account.post(schema=RegisterSchema, validators=(body_validator,))
+account = Service(name="account",
+                  path="account/{action}",
+                  description="User account manager")
+"""
+User account manager 
+--------------------
+To allow the user administer his/her account: create, login, logout, reset password etc.
+"""
+
+
+def signup_schema_validator(request, **kwargs):
+    """ SignUpSchema needs request to be in context"""
+    kwargs['schema'] = SignUpSchema().bind(request=request)
+    return body_validator(request, **kwargs)
+
+
+@account.post( match_param="action=signup", validators=signup_schema_validator)
 def signup(request: Request) -> Response:
     """Sign up view.
 
     :param request: Pyramid request.
     :return: Pyramid Response
     """
-    try:
-        captured = SignUpSchema(context={'request': request}).load(request.json)
-    except ValidationError as e:
-        return HTTPUnauthorized(json={'message': e.messages})
-
     signup_service = SignUpService(request)
-    return signup_service.sign_up(user_data=captured)
+    return signup_service.sign_up(user_data=request.validated)
 
 
-@view_config(route_name='login_social', request_method=('POST', 'GET'))
-def login_social(request: Request) -> Response:
-    """Login using OAuth and any of the social providers.
-
-    :param request: Pyramid request.
-    :return: Context to be used by the renderer.
-    """
-    # Get the internal provider name URL variable.
-    provider_name = request.matchdict.get('provider_name')
-    oauth_login_service = get_oauth_login_service(request)
-    assert oauth_login_service, "OAuth not configured for {}".format(provider_name)
-    return oauth_login_service.handle_request(provider_name)
-
-
-@view_config(route_name='access_token', request_method='POST')
-def access_token(request: Request) -> Response:
-    payload = dict(request.POST.items())
-    try:
-        captured = AccessTokenSchema().load(payload)
-    except ValidationError as e:
-        return HTTPUnauthorized(json={'message': e.messages})
-
-    client_id = captured['client_id']
-    authorizationcode = captured['authorizationcode']
-    login_service = LoginService(request)
-    return login_service.create_access_token(client_id, authorizationcode)
-
-@view_config(route_name='activate', request_method='POST')
+@account.post(
+    match_param="action=activate",
+    schema=ActivateSchema(),
+    validators=querystring_validator
+)
 def activate(request: Request) -> Response:
     """View to activate user after clicking email link.
 
     :param request: Pyramid request.
     :return: Context to be used by the renderer.
     """
-    code = request.matchdict.get('code', None)
+    code = request.validated["code"]
     signup_service = SignUpService(request)
     return signup_service.activate_by_email(code)
 
 
-@view_config(route_name='login', request_method='POST')
-def login(request: Request) -> Response:
-    """Default login view implementation.
+def forgot_password_schema_validator(request, **kwargs):
+    """ SignUpSchema needs request to be in context"""
+    kwargs['schema'] = ForgotPasswordSchema().bind(request=request)
+    return querystring_validator(request, **kwargs)
+
+
+@account.post(
+    match_param="action=forgot-password",
+    schema=ForgotPasswordSchema(),
+    validators=forgot_password_schema_validator
+)
+def forgot_password(request: Request) -> Response:
+    """Forgot password email.
+
+    Send an email with a link/code that allows the account change the password
+    
+    :param request: Pyramid request.
+    :return: Response
+    """
+    credential_activity_service = CredentialService(request)
+    email = request.validated["email"]
+    try:
+        return credential_activity_service.create_forgot_password_request(email)
+    except CannotResetPasswordException as e:
+        return HTTPUnprocessableEntity(json={"message": str(e)})
+
+
+@account.post(
+    match_param="action=reset-password",
+    schema=ResetPasswordSchema(),
+    validators=body_validator
+)
+def reset_password(request: Request) -> Response:
+    """Reset password view.
+
+    Given the right token/code it allows reset the account password
 
     :param request: Pyramid request.
-    :return: Context to be used by the renderer or a HTTPFound redirect if user is already logged in.
+    :return: Context to be used by the renderer.
     """
-    try:
-        captured = LoginSchema().load(request.json_body)
-    except ValidationError as e:
-        return HTTPUnauthorized(json={'message': e.messages})
+    code = request.params.get("code", None)
+    credential_activity_service = CredentialService(request)
+    user = credential_activity_service.get_user_for_password_reset_token(code)
+    if not user:
+        raise HTTPNotFound(json={"message": "Invalid password reset code"})
 
-    username = captured['username']
-    password = captured['password']
-    login_service = LoginService(request)
-
-    try:
-        return login_service.authenticate_credentials(username, password, login_source="login_form")
-    except AuthenticationFailure as e:
-        return HTTPUnauthorized(json={'message': str(e)})
+    password = request.validated["password"]
+    return credential_activity_service.reset_password(code, password)
 
 
-@view_config(permission='authenticated', route_name='logout', request_method='POST')
+@account.post(
+    match_param="action=logout",
+    permission="authenticated"
+)
 def logout(request: Request) -> Response:
     """Logout view.
 
     :param request: Pyramid request.
     :return: Context to be used by the renderer.
     """
-    # if request.method != "POST":
-    #     # No GET / CSRF logouts
-    #     return HTTPMethodNotAllowed(json=None)
     login_service = LoginService(request)
     return login_service.logout()
 
 
-@view_config(route_name='forgot_password', request_method='POST')
-def forgot_password(request: Request) -> Response:
-    """Forgot password screen.
+oauth = Service(name="oauth",
+                path="/oauth/{action}",
+                description="Manage account authentication")
+
+"""
+Authorization and authentication stuff
+--------------------------------------
+
+"""
+
+@oauth.post(
+    match_param="action=token",
+    request_param="grant_type=authorization_code",
+    schema=AuthorizationCodeSchema(),
+    validators=querystring_validator,
+)
+def token(request: Request) -> Response:
+    client_id = request.validated["client_id"]
+    authorizationcode = request.validated["code"]
+    login_service = LoginService(request)
+    return login_service.create_access_token(client_id, authorizationcode)
+
+
+@oauth.post(
+    match_param="action=token",
+    request_param="grant_type=password",
+    schema=LoginSchema(),
+    validators=body_validator
+)
+def login(request: Request) -> Response:
+    """Default login view implementation.
+
+    :param request: Pyramid request.
+    :return: Context to be used by the renderer or a HTTPFound redirect if user is already logged in.
+    """
+    username = request.validated["username"]
+    password = request.validated["password"]
+    login_service = LoginService(request)
+
+    try:
+        return login_service.authenticate_credentials(username, password, login_source="login_form")
+    except AuthenticationFailure as e:
+        return HTTPUnauthorized(json={"message": str(e)})
+
+
+authprovider = Service(name="authprovider",
+                path="/oauth/login/{provider}",
+                description="Manage account authentication through third party providers")
+
+"""
+Authorization and authentication through third party providers
+--------------------------------------------------------------
+    * Facebook
+    * Google 
+    * Twitter
+"""
+
+
+@authprovider.post()
+def social_auth(request: Request) -> Response:
+    """Login using OAuth and any of the social providers.
+
+    * Handle the user request for authenticate against one of the auth providers we offer
 
     :param request: Pyramid request.
     :return: Response
     """
-    payload = dict(request.POST.items())
-    context = {'request': request}
-    try:
-        captured = ForgotPasswordSchema(context=context).load(payload)
-    except ValidationError as e:
-        return HTTPUnprocessableEntity(json={'errors': e.messages})
-
-    credential_activity_service = CredentialService(request)
-    email = captured["email"]
-    try:
-        return credential_activity_service.create_forgot_password_request(email)
-    except CannotResetPasswordException as e:
-        return HTTPUnprocessableEntity(json={'message': str(e)})
+    provider_name = request.matchdict.get("provider_name")
+    oauth_login_service = get_oauth_login_service(request)
+    assert oauth_login_service, "OAuth not configured for {}".format(provider_name)
+    return oauth_login_service.handle_request(provider_name)
 
 
-@view_config(route_name='reset_password', request_method='POST')
-def reset_password(request: Request) -> Response:
-    """Reset password view.
+@authprovider.get()
+def social_auth_redirect(request: Request) -> Response:
+    """Login using OAuth and any of the social providers.
 
-    User arrives on the page and enters the new password.
+    * Handle the redirect from the social auth provider after it  has asked the user for authentication
 
     :param request: Pyramid request.
-    :return: Context to be used by the renderer.
+    :return: Response
     """
-    code = request.matchdict.get('code', None)
-    credential_activity_service = CredentialService(request)
-    user = credential_activity_service.get_user_for_password_reset_token(code)
-    if not user:
-        raise HTTPNotFound(json={'message': 'Invalid password reset code'})
-
-    # n2IsrSqNTFt4uJBErIs8Q3DjMSUGZKC
-    try:
-        captured = ResetPasswordSchema(context={'request': request}).load(request.json_body)
-    except ValidationError as e:
-        return HTTPUnprocessableEntity(json={'errors': e.messages})
-
-    password = captured['password']
-    return credential_activity_service.reset_password(code, password)
+    provider_name = request.matchdict.get("provider_name")
+    oauth_login_service = get_oauth_login_service(request)
+    assert oauth_login_service, "OAuth not configured for {}".format(provider_name)
+    return oauth_login_service.handle_request(provider_name)

@@ -6,7 +6,6 @@ from email.header import Header
 from email.utils import formataddr
 
 # Pyramid
-from pyramid.interfaces import IRequest
 from pyramid.renderers import render
 from pyramid.settings import asbool
 from transaction import TransactionManager
@@ -16,12 +15,13 @@ from pyramid_mailer.message import Message
 
 # System
 from tm.system.mail.utils import create_mailer
+from tm.system.http import Request
 
 
 logger = logging.getLogger(__name__)
 
 
-def render_templated_mail(request: IRequest, template: str, context: dict) -> t.Tuple[str, str, str]:
+def render_templated_mail(request: Request, template: str, context: dict) -> t.Tuple[str, str, str]:
     """Render an email that is divided to three template files.
 
     The email is assembled from three different templates:
@@ -55,7 +55,7 @@ def render_templated_mail(request: IRequest, template: str, context: dict) -> t.
     return subject, text_body, html_body
 
 
-def send_templated_mail(request: IRequest, recipients: t.List, template: str, context: dict, sender=None, immediate=None, tm: t.Optional[TransactionManager]=None) -> t.Tuple[str, str, str]:
+def send_templated_mail(request: Request, recipients: t.List, template: str, context: dict, sender=None, immediate=None, tm: t.Optional[TransactionManager]=None) -> t.Tuple[str, str, str]:
     """Send out templatized HTML and plain text emails.
 
     Each HTML email should have a plain text fallback. Premailer package is used to convert any CSS styles in HTML email messages to inline, so that email clients display them.

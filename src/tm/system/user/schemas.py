@@ -9,74 +9,84 @@ from tm.system.user.models import User
 from tm.system.user.userregistry import UserRegistry
 
 # Schema validations
-from marshmallow import Schema, fields, validate, validates, ValidationError #, EXCLUDE
+# from marshmallow import Schema, fields, validate, validates, ValidationError #, EXCLUDE
+import colander as c
 
 PASSWORD_MIN_LENGTH = 6
+password = c.SchemaNode(c.String(), validator=c.Length(min=PASSWORD_MIN_LENGTH), required=True)
 
 
-def email_exists(request: IRequest, value: str):
-    """Validator that ensures a User exists with the email.
 
-    :param request: Request.
-    :param value: Email address.
-    :raises: ValidationError if email is not registered for an User.
-    """
-    exists = request.dbsession.query(User).filter(User.email.ilike(value)).one_or_none()
-    if not exists:
-        raise ValidationError("Email does not exists: {email}".format(email=value))
-
-
-class SignUpSchema(Schema):
+class SignUpSchema(c.Schema):
     """Username-less registration form schema."""
 
-    email = fields.Email(required=True)
-    password = fields.String(required=True, validate=validate.Length(min=PASSWORD_MIN_LENGTH))
+    def validate_unique_user_email(node: c.SchemaNode, value: str):
+        """Make sure we cannot enter the same username twice.
 
-    @validates('email')
-    def validate_email(self, value):
-        dbsession = self.context['request'].dbsession
+        :param node: Colander SchemaNode.
+        :param value: Email address.
+        :param kwargs: Keyword arguments.
+        :raises: c.Invalid if email address already taken.
+        """
+
+        request = node.bindings["request"]
+        dbsession = request.dbsession
         value = value.strip()
         if dbsession.query(User).filter_by(email=value).one_or_none():
-            raise ValidationError("Email address already taken")
+            raise c.Invalid(node, "Email address already taken")
 
-    # class meta:
-    #     unknown = EXCLUDE
+    email = c.SchemaNode(
+        c.String(),
+        title='Email',
+        validator=c.All(c.Email(), validate_unique_user_email),
+    )
 
-    # def __call__(self, *args, **kwargs):
+    password = password.clone()
 
 
-
-class LoginSchema(Schema):
+class LoginSchema(c.Schema):
     """Login form schema.
 
     The user can log in both with email and his/her username, though we recommend using emails as users tend to forget their usernames.
     """
-    username = fields.Email(required=True)
-    password = fields.String(validate=validate.Length(min=PASSWORD_MIN_LENGTH), required=True)
+    username = c.SchemaNode(c.String(), title='Email', validators=c.Email(), required=True)
+    password = password.clone()
 
-class AccessTokenSchema(Schema):
+
+class ActivateSchema(c.Schema):
+    """Activate schema.
+
+    Activation code is used to activate the account
+    """
+    code = c.SchemaNode(c.Str(), required=True)
+
+class AuthorizationCodeSchema(c.Schema):
     """AccessToken request schema.
 
     Authorization code is used to request an access token
     """
-    authorizationcode = fields.Str(required=True)
-    client_id = fields.Int(required=True)
+    code = c.SchemaNode(c.Str(), required=True)
+    client_id = c.SchemaNode(c.Int(), required=True)
 
-class ResetPasswordSchema(Schema):
+
+class ResetPasswordSchema(c.Schema):
     """Reset password schema."""
-    username = fields.String(required=False)
-    password = fields.String(validate=validate.Length(min=PASSWORD_MIN_LENGTH), required=True)
+    user = c.SchemaNode(c.String(), missing=c.null)
+    password = password.clone()
 
 
-class ForgotPasswordSchema(Schema):
-    """Used on forgot password view."""
-    email = fields.Email()
+class ForgotPasswordSchema(c.Schema):
+    """Used on forgot password request."""
 
-    @validates('email')
-    def validate_email(self, value):
-        request = self.context['request']
+    def validate_user_exist_with_email(node: c.SchemaNode, value: str):
+        request = node.bindings['request']
         user_registry = UserRegistry(request)
         user = user_registry.get_by_email(value)
-
         if not user:
-            raise ValidationError("Cannot reset password for such email: {email}".format(email=value))
+            raise c.Invalid(node, msg='Cannot reset password for such email: {email}'.format(email=value))
+
+    email = c.SchemaNode(
+        c.String(),
+        validator=c.All(c.Email(), validate_user_exist_with_email),
+        description="The email address under which you have your account. Example: joe@example.com"
+    )

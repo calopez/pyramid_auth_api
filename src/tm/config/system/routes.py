@@ -26,11 +26,11 @@ def includeme(config):
 
     config.add_route('users', '/users', accept='application/json')
 
-    config.add_route('login', '/login', accept='application/json')
-    config.add_route('logout', '/logout', accept='application/json')
-    config.add_route('forgot_password', '/forgot-password', accept='application/json')
-    config.add_route('reset_password', '/reset-password/{code}', accept='application/json')
-    config.add_route('signup', '/signup', accept='application/json')
-    config.add_route('activate', '/activate/{code}', accept='application/json')
+    # config.add_route('login', '/login', accept='application/json')
+    # config.add_route('logout', '/logout', accept='application/json')
+    # config.add_route('forgot_password', '/forgot-password', accept='application/json')
+    # config.add_route('reset_password', '/reset-password/{code}', accept='application/json')
+    # config.add_route('signup', '/signup', accept='application/json')
+    # config.add_route('activate', '/activate/{code}', accept='application/json')
     config.scan(subscribers)
     config.scan(api)
